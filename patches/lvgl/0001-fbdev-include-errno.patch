@@ -1,0 +1,10 @@
+--- a/src/drivers/display/fb/lv_linux_fbdev.c
++++ b/src/drivers/display/fb/lv_linux_fbdev.c
+@@ -11,8 +11,9 @@
+ #include <unistd.h>
+ #include <stddef.h>
+ #include <stdio.h>
++#include <errno.h>
+ #include <fcntl.h>
+ #include <sys/mman.h>
+ #include <sys/ioctl.h>

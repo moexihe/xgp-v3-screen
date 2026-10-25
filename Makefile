@@ -3,7 +3,7 @@ include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=xgp-v3-screen
 PKG_VERSION:=2.2
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_LICENSE:=GPL-3.0-only
 
 include $(INCLUDE_DIR)/package.mk
@@ -58,6 +58,7 @@ define Build/Prepare
 			fi; \
 			sleep $$$$((attempt * 2)); \
 		done
+	patch -d $(PKG_BUILD_DIR)/lvgl -p1 < $(CURDIR)/patches/lvgl/0001-fbdev-include-errno.patch
 endef
 
 define Build/Compile
