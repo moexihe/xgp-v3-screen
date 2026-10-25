@@ -206,20 +206,40 @@ start_service() {
 # 控制屏幕背光
 set_backlight() {
     local on="$1"
+    local value
+    local max_brightness
+    local directory
     local paths="/sys/devices/platform/led-controller/leds/blue:backlight/brightness
 /sys/class/leds/blue:backlight/brightness
 /sys/class/backlight/backlight/brightness"
     
     for path in $paths; do
         if [ -w "$path" ]; then
+            directory=${path%/brightness}
+            max_brightness=$(cat "$directory/max_brightness" 2>/dev/null)
+            case "$max_brightness" in
+                ''|*[!0-9]*)
+                    echo "Cannot determine maximum brightness for $path" >&2
+                    return 1
+                    ;;
+            esac
+
             if [ "$on" = "1" ]; then
-                echo 255 > "$path" 2>/dev/null
+                value="$max_brightness"
             else
-                echo 0 > "$path" 2>/dev/null
+                value=0
             fi
+
+            echo "$value" > "$path" 2>/dev/null || {
+                echo "Failed to set brightness for $path to $value" >&2
+                return 1
+            }
             return 0
         fi
     done
+
+    echo "No writable backlight brightness control found" >&2
+    return 1
 }
 
 stop_service() {
