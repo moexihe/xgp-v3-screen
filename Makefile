@@ -3,7 +3,7 @@ include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=xgp-v3-screen
 PKG_VERSION:=2.2
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 PKG_LICENSE:=GPL-3.0-only
 
 include $(INCLUDE_DIR)/package.mk
@@ -45,8 +45,19 @@ define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
 	$(CP) ./src/* $(PKG_BUILD_DIR)/
 	$(CP) ./mipi-dbi-gc9307 $(PKG_BUILD_DIR)/
-	(cd $(PKG_BUILD_DIR) && \
-	 git clone --depth 1 -b release/v9.3 https://github.com/lvgl/lvgl.git lvgl)
+	cd $(PKG_BUILD_DIR) && \
+		for attempt in 1 2 3; do \
+			if git -c http.version=HTTP/1.1 clone --depth 1 -b release/v9.3 \
+				https://github.com/lvgl/lvgl.git lvgl; then \
+				break; \
+			fi; \
+			rm -rf lvgl; \
+			if [ "$$$$attempt" -eq 3 ]; then \
+				echo "Failed to download LVGL after 3 attempts." >&2; \
+				exit 1; \
+			fi; \
+			sleep $$$$((attempt * 2)); \
+		done
 endef
 
 define Build/Compile

@@ -1,0 +1,2 @@
+*.init text eol=lf
+files/uci-defaults-* text eol=lf
