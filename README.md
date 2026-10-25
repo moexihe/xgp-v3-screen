@@ -97,12 +97,13 @@ xgp-v3-screen/
 
 ### 前置条件
 
-此包面向包含 `kmod-drm-panel-mipi-dbi` 的 OpenWrt master。确保目标内核启用了 DRM fbdev emulation，使 DRM 面板能提供应用使用的 `/dev/fb*`：
+此包面向包含 `kmod-drm-panel-mipi-dbi` 的 OpenWrt master。`kmod-drm-panel-mipi-dbi` 是在 OpenWrt 的 `make menuconfig` 中选择的内核模块包；DRM fbdev emulation 则是 Linux 内核配置项，两者不是同一个选项。需要 `/dev/fb*` 时，检查并启用 `CONFIG_DRM_FBDEV_EMULATION`：
 ```bash
-make menuconfig
-# 进入: Kernel modules → Video Support → kmod-drm-panel-mipi-dbi
+make kernel_menuconfig
+# 在内核配置界面按 /，搜索 DRM_FBDEV_EMULATION
+# 确认 Enable legacy fbdev support for your modesetting driver 已启用
 ```
-`xgp-v3-screen` 会依赖并自动安装 `kmod-drm-panel-mipi-dbi` 及 GC9307 初始化固件。还需在设备树中将屏幕 SPI 节点配置为 `galaxycore,gc9307`、`panel-mipi-dbi-spi` 兼容设备，并设置实际使用的 SPI 总线、片选、D/C、复位和背光 GPIO。通用驱动通过第一个 compatible 值请求 `/lib/firmware/galaxycore,gc9307.bin`。例如：
+fbdev emulation 只负责在 DRM 设备成功注册后提供兼容的 `/dev/fb*`，不能代替设备树中的面板节点，也不会单独创建 `/dev/dri/card0`。如果 `/sys/class/drm` 中只有 `version` 且没有 `/dev/dri/card0`，应先排查 SPI 面板设备是否出现在设备树中、驱动是否成功 probe，再检查 fbdev 配置。`xgp-v3-screen` 会依赖并自动安装 `kmod-drm-panel-mipi-dbi` 及 GC9307 初始化固件。还需在设备树中将屏幕 SPI 节点配置为 `galaxycore,gc9307`、`panel-mipi-dbi-spi` 兼容设备，并设置实际使用的 SPI 总线、片选、D/C、复位和背光 GPIO。通用驱动通过第一个 compatible 值请求 `/lib/firmware/galaxycore,gc9307.bin`。例如：
 
 ```dts
 display@0 {

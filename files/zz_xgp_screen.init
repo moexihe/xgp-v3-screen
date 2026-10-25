@@ -48,6 +48,51 @@ detect_framebuffer() {
     return 1
 }
 
+ensure_mipi_dbi_panel_bound() {
+    local device="/sys/bus/spi/devices/spi3.0"
+    local driver="/sys/bus/spi/drivers/panel-mipi-dbi-spi"
+    local attempt
+
+    [ -d "$device" ] || {
+        echo "GC9307 SPI device not found: $device" >&2
+        return 1
+    }
+
+    if [ -L "$device/driver" ]; then
+        return 0
+    fi
+
+    [ -r /lib/firmware/galaxycore,gc9307.bin ] || {
+        echo "GC9307 firmware is missing: /lib/firmware/galaxycore,gc9307.bin" >&2
+        return 1
+    }
+
+    if [ ! -e "$driver/bind" ]; then
+        modprobe panel_mipi_dbi || {
+            echo "Failed to load panel_mipi_dbi kernel module" >&2
+            return 1
+        }
+    fi
+
+    [ -e "$driver/bind" ] || {
+        echo "MIPI DBI SPI driver is unavailable: $driver" >&2
+        return 1
+    }
+
+    echo spi3.0 > "$driver/bind" || {
+        echo "Failed to bind GC9307 SPI device to panel-mipi-dbi-spi" >&2
+        return 1
+    }
+
+    for attempt in 1 2 3 4 5; do
+        [ -L "$device/driver" ] && return 0
+        sleep 1
+    done
+
+    echo "GC9307 panel probe did not bind successfully; check dmesg for details" >&2
+    return 1
+}
+
 # 禁用 framebuffer 控制台输出
 # 这可以防止内核日志（如设备插拔事件）显示在屏幕上
 disable_fb_console() {
@@ -126,6 +171,10 @@ start_service() {
     fi
 
     echo "XGP Screen is enabled in config, starting service..."
+
+    if ! ensure_mipi_dbi_panel_bound; then
+        return 1
+    fi
 
     # 检测framebuffer设备
     if ! detect_framebuffer; then
