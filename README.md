@@ -13,10 +13,11 @@ NLnet XiGuaPi V3 TFT 屏幕控制程序，支持 Web 配置界面。
 本项目在原始版本基础上进行了以下改造：
 
 ### 1. 集成硬件驱动
-- ✅ 内置 `kmod-fb-tft-gc9307` 驱动源码，无需单独安装
-- ✅ 使用标准 Linux framebuffer API
+- ✅ 使用 OpenWrt master 的 `kmod-drm-panel-mipi-dbi` 通用 DRM 面板驱动
+- ✅ 内置 GC9307 MIPI DBI 初始化序列固件包
+- ✅ 通过 DRM fbdev emulation 提供标准 Linux framebuffer 接口
 - ✅ 支持通过配置指定 framebuffer 设备路径
-- ✅ 编译时自动构建驱动和应用两个包
+- ✅ 编译时自动构建初始化固件和应用包
 
 ### 2. 新增 LuCI Web 控制界面
 - ✅ 集成到 OpenWrt 管理界面（服务 → XGP Screen）
@@ -71,13 +72,10 @@ NLnet XiGuaPi V3 TFT 屏幕控制程序，支持 Web 配置界面。
 
 ```
 xgp-v3-screen/
-├── Makefile                    # OpenWrt 包构建文件（包含驱动和应用）
-├── kmod-fb-tft-gc9307/        # GC9307 驱动源码
-│   ├── src/
-│   │   ├── fb_gc9307.c
-│   │   ├── fbtft.h
-│   │   └── Makefile
-│   └── LICENSE-DRIVER
+├── Makefile                    # OpenWrt 包构建文件（初始化固件和应用）
+├── mipi-dbi-gc9307/           # GC9307 MIPI DBI 初始化序列和固件转换工具
+│   ├── galaxycore,gc9307.txt
+│   └── mipi-dbi-cmd
 ├── files/
 │   ├── modem_info.py          # Modem 信息获取脚本
 │   ├── xgp_screen.config      # 默认 UCI 配置
@@ -99,12 +97,39 @@ xgp-v3-screen/
 
 ### 前置条件
 
-确保您的 OpenWrt 编译环境已经选择了以下内核模块：
+此包面向包含 `kmod-drm-panel-mipi-dbi` 的 OpenWrt master。确保目标内核启用了 DRM fbdev emulation，使 DRM 面板能提供应用使用的 `/dev/fb*`：
 ```bash
 make menuconfig
-# 进入: Kernel modules → Video Support → kmod-fb-tft
-# 确保 kmod-fb-tft 已选中（驱动依赖此包）
+# 进入: Kernel modules → Video Support → kmod-drm-panel-mipi-dbi
 ```
+`xgp-v3-screen` 会依赖并自动安装 `kmod-drm-panel-mipi-dbi` 及 GC9307 初始化固件。还需在设备树中将屏幕 SPI 节点配置为 `galaxycore,gc9307`、`panel-mipi-dbi-spi` 兼容设备，并设置实际使用的 SPI 总线、片选、D/C、复位和背光 GPIO。通用驱动通过第一个 compatible 值请求 `/lib/firmware/galaxycore,gc9307.bin`。例如：
+
+```dts
+display@0 {
+	compatible = "galaxycore,gc9307", "panel-mipi-dbi-spi";
+	reg = <0>;
+	spi-max-frequency = <24000000>;
+	dc-gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
+	write-only;
+	format = "r5g6b5";
+	width-mm = <35>;
+	height-mm = <28>;
+
+	panel-timing {
+		hactive = <240>;
+		vactive = <320>;
+		hback-porch = <0>;
+		vback-porch = <0>;
+		clock-frequency = <0>;
+		hfront-porch = <0>;
+		hsync-len = <0>;
+		vfront-porch = <0>;
+		vsync-len = <0>;
+	};
+};
+```
+将示例 GPIO、片选、SPI 速率和面板物理尺寸替换为目标板实际值（上面的 `35`、`28` 仅为格式示例）。设备树的 GPIO 定义需包含 `<dt-bindings/gpio/gpio.h>`。
 
 ### 1. 放置源码
 ```bash
@@ -124,8 +149,8 @@ make package/xgp-v3-screen/compile -j$(nproc)
 ```
 
 编译完成后会生成两个包：
-- `kmod-fb-tft-gc9307-*.apk` - GC9307 LCD 驱动（内核模块）
-- `xgp-v3-screen-*.apk` - 屏幕控制程序（依赖驱动包）
+- `mipi-dbi-gc9307-*.apk` - GC9307 MIPI DBI 初始化固件
+- `xgp-v3-screen-*.apk` - 屏幕控制程序（依赖初始化固件和 DRM 面板驱动）
 
 ### 4. 安装
 ```bash
@@ -208,15 +233,16 @@ uci commit xgp_screen
 
 **编译依赖：**
 - OpenWrt 编译环境
-- `kmod-fb-tft` - Linux framebuffer TFT 驱动框架（必须先在内核中选中）
+- OpenWrt master 中的 `kmod-drm-panel-mipi-dbi`
+- 目标内核需启用 DRM fbdev emulation，以提供 `/dev/fb*`
 
 **运行时依赖：**
 - `python3` - Modem 信息获取
 - `libpthread` - 多线程支持
 - `libstdcpp` - C++ 标准库
 - `luci-base` - LuCI 基础框架
-- `kmod-fb-tft` - 会自动安装
-- `kmod-fb-tft-gc9307` - GC9307 LCD framebuffer 驱动（已集成，自动编译和安装）
+- `kmod-drm-panel-mipi-dbi` - 通用 MIPI DBI DRM 面板驱动（自动安装）
+- `mipi-dbi-gc9307` - GC9307 面板初始化固件（自动安装）
 
 ## 服务管理
 
@@ -242,5 +268,5 @@ GPL-3.0-only
 
 - 原始项目作者 [zzzz0317](https://github.com/zzzz0317)
   - [xgp-v3-screen](https://github.com/zzzz0317/xgp-v3-screen) - 屏幕控制程序
-  - [kmod-fb-tft-gc9307](https://github.com/zzzz0317/kmod-fb-tft-gc9307) - GC9307 驱动
+- [panel-mipi-dbi](https://github.com/notro/panel-mipi-dbi) - MIPI DBI 面板固件格式工具
 - [LVGL](https://lvgl.io/) - 嵌入式图形库

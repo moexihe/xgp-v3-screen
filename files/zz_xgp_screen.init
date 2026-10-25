@@ -130,7 +130,7 @@ start_service() {
     # 检测framebuffer设备
     if ! detect_framebuffer; then
         echo "Error: No framebuffer device found (/dev/fb0 or /dev/fb1)." >&2
-        echo "Please install a framebuffer driver for your display (e.g. kmod-fb-tft-gc9307)." >&2
+        echo "Check the DRM panel driver, device-tree panel node, and DRM fbdev emulation." >&2
         return 1
     fi
 

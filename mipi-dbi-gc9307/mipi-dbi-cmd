@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: CC0-1.0
+#
+# Firmware format converter for the Linux panel-mipi-dbi driver.
+# Based on the public-domain mipi-dbi-cmd tool by Noralf Trønnes.
+
+import argparse
+import sys
+
+
+def parse_values(parts, line_number):
+    values = []
+    for part in parts:
+        try:
+            value = int(part, 0)
+        except ValueError as error:
+            raise ValueError(f"line {line_number}: not a number: {part}") from error
+        if not 0 <= value <= 0xFF:
+            raise ValueError(f"line {line_number}: value out of bounds: {part}")
+        values.append(value)
+    return values
+
+
+def make_file(output_path, input_path):
+    data = bytearray(b"MIPI DBI" + bytes(7))
+    data.append(1)
+
+    with open(input_path, encoding="utf-8") as source:
+        for line_number, line in enumerate(source, 1):
+            line = line.partition("#")[0].strip()
+            if not line:
+                continue
+
+            parts = line.split()
+            if parts[0] == "command":
+                values = parse_values(parts[1:], line_number)
+                if not values:
+                    raise ValueError(f"line {line_number}: command requires an opcode")
+                parameters = values[1:]
+                data.extend((values[0], len(parameters)))
+                data.extend(parameters)
+            elif parts[0] == "delay":
+                values = parse_values(parts[1:], line_number)
+                if len(values) != 1:
+                    raise ValueError(f"line {line_number}: delay takes exactly one argument")
+                data.extend((0, 1, values[0]))
+            else:
+                raise ValueError(f"line {line_number}: unknown command: {parts[0]}")
+
+    if len(data) == 16:
+        raise ValueError("command file contains no commands")
+
+    with open(output_path, "wb") as output:
+        output.write(data)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build panel-mipi-dbi firmware")
+    parser.add_argument("output", help="output firmware file")
+    parser.add_argument("input", help="input command sequence")
+    args = parser.parse_args()
+
+    try:
+        make_file(args.output, args.input)
+    except (OSError, ValueError) as error:
+        print(error, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -3,24 +3,23 @@ include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=xgp-v3-screen
 PKG_VERSION:=2.2
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_LICENSE:=GPL-3.0-only
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/cmake.mk
 
-# Kernel module package for GC9307 driver
-define KernelPackage/fb-tft-gc9307
-	SUBMENU:=Video Support
-	TITLE:=FB driver for the GC9307 LCD Controller
-	FILES:=$(PKG_BUILD_DIR)/kmod-fb-tft-gc9307/fb_gc9307.ko
-	AUTOLOAD:=$(call AutoLoad,09,fb_gc9307)
-	DEPENDS:=+kmod-fb-tft
+# MIPI DBI panel initialization sequence for the GC9307
+define Package/mipi-dbi-gc9307
+	SECTION:=firmware
+	CATEGORY:=Firmware
+	TITLE:=MIPI DBI initialization sequence for GC9307
+	PKGARCH:=all
+	DEPENDS:=+kmod-drm-panel-mipi-dbi
 endef
 
-define KernelPackage/fb-tft-gc9307/description
-	Framebuffer driver for the GC9307 LCD Controller.
-	Integrated with xgp-v3-screen project.
+define Package/mipi-dbi-gc9307/description
+	GC9307 initialization commands for the generic MIPI DBI DRM panel driver.
 endef
 
 # Application package
@@ -28,13 +27,13 @@ define Package/xgp-v3-screen
 	SECTION:=utils
 	CATEGORY:=Utilities
 	TITLE:=NLnet XiGuaPi V3 TFT Screen
-	DEPENDS:=+python3 +libpthread +libstdcpp +luci-base +kmod-fb-tft-gc9307
+	DEPENDS:=+python3 +libpthread +libstdcpp +luci-base +mipi-dbi-gc9307
 	URL:=https://github.com/zzzz0317/xgp-v3-screen
 endef
 
 define Package/xgp-v3-screen/description
 	NLnet XiGuaPi V3 TFT Screen with integrated LuCI Web UI control.
-	Includes GC9307 LCD framebuffer driver (kmod-fb-tft-gc9307).
+	Includes GC9307 MIPI DBI panel initialization firmware.
 endef
 
 define Package/xgp-v3-screen/conffiles
@@ -45,19 +44,25 @@ define Build/Prepare
 	$(call Build/Prepare/Default)
 	mkdir -p $(PKG_BUILD_DIR)
 	$(CP) ./src/* $(PKG_BUILD_DIR)/
-	$(CP) ./kmod-fb-tft-gc9307 $(PKG_BUILD_DIR)/
+	$(CP) ./mipi-dbi-gc9307 $(PKG_BUILD_DIR)/
 	(cd $(PKG_BUILD_DIR) && \
 	 git clone --depth 1 -b release/v9.3 https://github.com/lvgl/lvgl.git lvgl)
 endef
 
 define Build/Compile
-	# Compile kernel module
-	$(KERNEL_MAKE) M="$(PKG_BUILD_DIR)/kmod-fb-tft-gc9307/src" \
-		EXTRA_CFLAGS="$(BUILDFLAGS)" \
-		modules
-	$(CP) $(PKG_BUILD_DIR)/kmod-fb-tft-gc9307/src/fb_gc9307.ko $(PKG_BUILD_DIR)/kmod-fb-tft-gc9307/
+	# Generate the firmware format consumed by panel-mipi-dbi.
+	$(STAGING_DIR_HOST)/bin/python3 \
+		$(PKG_BUILD_DIR)/mipi-dbi-gc9307/mipi-dbi-cmd \
+		$(PKG_BUILD_DIR)/gc9307.bin \
+		$(PKG_BUILD_DIR)/mipi-dbi-gc9307/galaxycore,gc9307.txt
 	# Compile application
 	$(call Build/Compile/Default)
+endef
+
+define Package/mipi-dbi-gc9307/install
+	$(INSTALL_DIR) $(1)/lib/firmware
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/gc9307.bin \
+		$(1)/lib/firmware/galaxycore,gc9307.bin
 endef
 
 define Package/$(PKG_NAME)/install
@@ -94,5 +99,5 @@ define Package/$(PKG_NAME)/prerm
 }
 endef
 
-$(eval $(call KernelPackage,fb-tft-gc9307))
+$(eval $(call BuildPackage,mipi-dbi-gc9307))
 $(eval $(call BuildPackage,$(PKG_NAME)))
